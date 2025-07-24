@@ -17,6 +17,7 @@
     "@mui/material": "^7.2.0",
     "axios": "^1.11.0",
     "i18next": "^25.3.2",
+    "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-chatbot-kit": "^2.2.2",
     "react-dom": "^19.1.0",
