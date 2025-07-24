@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ChatMessage from '../components/ChatMessage';
+import SymptomChecker from '../utils/symptomChecker';
 import { 
   Heart, 
   Plus, 
@@ -14,12 +16,25 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      text: "Hello! I'm your AI health assistant. Please describe your symptoms and I'll help analyze them.",
+      isBot: true,
+      timestamp: new Date()
+    }
+  ]);
   const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(false);
   const [selectedSymptom, setSelectedSymptom] = useState('');
   const [inputText, setInputText] = useState('');
   const [activeNavItem, setActiveNavItem] = useState('consultation');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState(null);
+
+  // Initialize symptom checker
+  const symptomChecker = new SymptomChecker();
 
   React.useEffect(() => {
     const checkMobile = () => {
@@ -34,12 +49,62 @@ const Dashboard = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const symptoms = [
-    'I have a headache',
-    'Feeling tired',
-    'Stomach pain',
-    'Fever'
+  const quickSymptoms = [
+    'I have a severe headache',
+    'I feel chest pain and shortness of breath',
+    'I have stomach pain and nausea',
+    'I have fever and cough',
+    'I feel dizzy and confused',
+    'I have body ache and fatigue'
   ];
+
+  const handleSendMessage = () => {
+    if (!inputText.trim()) return;
+
+    // Add user message
+    const userMessage = {
+      id: messages.length + 1,
+      text: inputText,
+      isBot: false,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    setIsTyping(true);
+
+    // Simulate typing delay and process symptoms
+    setTimeout(() => {
+      const analysis = symptomChecker.processSymptoms(inputText);
+      
+      const botMessage = {
+        id: messages.length + 2,
+        text: analysis.hasSymptoms ? analysis : analysis.message,
+        isBot: true,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, botMessage]);
+      setIsTyping(false);
+      
+      if (analysis.hasSymptoms) {
+        setCurrentAnalysis(analysis);
+        setIsAnalysisExpanded(true);
+      }
+    }, 1500);
+  };
+
+  const handleQuickSymptom = (symptom) => {
+    setInputText(symptom);
+    setSelectedSymptom(symptom);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   const sidebarItems = [
     { 
@@ -167,16 +232,38 @@ const Dashboard = () => {
         </div>
 
         <div className="chatArea">
-          <div className="welcomeMessage">
-            <p>Hello! I'm your AI health assistant. How are you feeling today?</p>
+          <div className="messagesContainer">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message.text}
+                isBot={message.isBot}
+              />
+            ))}
+            
+            {isTyping && (
+              <div className="flex justify-start mb-4">
+                <div className="bg-gray-100 text-gray-800 rounded-lg rounded-bl-sm px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    </div>
+                    <span className="text-sm text-gray-500">Analyzing symptoms...</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="symptomButtons">
-            {symptoms.map((symptom, index) => (
+            <h4 className="quickSymptomsTitle">Quick Symptom Examples:</h4>
+            {quickSymptoms.map((symptom, index) => (
               <button
                 key={index}
                 className={`symptomButton ${selectedSymptom === symptom ? 'selected' : ''}`}
-                onClick={() => setSelectedSymptom(symptom)}
+                onClick={() => handleQuickSymptom(symptom)}
               >
                 {symptom}
               </button>
@@ -190,12 +277,17 @@ const Dashboard = () => {
                 placeholder="Describe your symptoms..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
                 className="textInput"
               />
               <button className="micButton">
                 <Mic className="micIcon" />
               </button>
-              <button className="sendButton">
+              <button 
+                className="sendButton"
+                onClick={handleSendMessage}
+                disabled={!inputText.trim() || isTyping}
+              >
                 <Send className="sendIcon" />
               </button>
             </div>
@@ -207,10 +299,16 @@ const Dashboard = () => {
       <div className={`analysisPanel ${isAnalysisExpanded ? 'expanded' : ''}`}>
         <div className="analysisHeader" onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}>
           <h3>Health Analysis</h3>
-          <span className="analysisStatus">UNKNOWN</span>
+          <span className="analysisStatus">
+            {currentAnalysis ? currentAnalysis.topDisease?.name.toUpperCase() : 'NO DATA'}
+          </span>
         </div>
         <div className="analysisContent">
-          <p className="noDataText">No analysis data yet.</p>
+          {currentAnalysis ? (
+            <AnalysisPanel analysis={currentAnalysis} />
+          ) : (
+            <p className="noDataText">No analysis data yet. Start by describing your symptoms.</p>
+          )}
         </div>
       </div>
 
@@ -534,30 +632,49 @@ const Dashboard = () => {
 
         .chatArea {
           flex: 1;
-          padding: 30px;
           display: flex;
           flex-direction: column;
-          justify-content: center;
-          align-items: center;
+          padding: 20px 30px;
         }
 
-        .welcomeMessage {
-          text-align: center;
-          margin-bottom: 30px;
+        .messagesContainer {
+          flex: 1;
+          overflow-y: auto;
+          margin-bottom: 20px;
+          padding-right: 10px;
         }
 
-        .welcomeMessage p {
-          font-size: 16px;
-          color: #666;
-          margin: 0;
+        .messagesContainer::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .messagesContainer::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 3px;
+        }
+
+        .messagesContainer::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 3px;
+        }
+
+        .messagesContainer::-webkit-scrollbar-thumb:hover {
+          background: #a8a8a8;
         }
 
         .symptomButtons {
           display: flex;
           gap: 12px;
-          margin-bottom: 40px;
+          margin-bottom: 20px;
           flex-wrap: wrap;
-          justify-content: center;
+        }
+
+        .quickSymptomsTitle {
+          width: 100%;
+          font-size: 14px;
+          font-weight: 600;
+          color: #666;
+          margin-bottom: 10px;
         }
 
         .symptomButton {
@@ -583,8 +700,7 @@ const Dashboard = () => {
         }
 
         .inputArea {
-          width: 100%;
-          max-width: 600px;
+          margin-top: auto;
         }
 
         .inputContainer {
@@ -650,6 +766,11 @@ const Dashboard = () => {
           color: white;
         }
 
+        .sendButton:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+
         .analysisPanel {
           width: 320px;
           background: white;
@@ -694,6 +815,17 @@ const Dashboard = () => {
           color: #999;
           font-size: 14px;
           margin: 0;
+        }
+
+        .analysisStatus {
+          font-size: 10px;
+          color: #999;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+          max-width: 120px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         @media (max-width: 1024px) {
@@ -760,12 +892,8 @@ const Dashboard = () => {
             padding: 15px 20px;
           }
           
-          .title {
-            font-size: 20px;
-          }
-          
           .chatArea {
-            padding: 20px;
+            padding: 15px 20px;
           }
           
           .symptomButtons {
@@ -814,12 +942,8 @@ const Dashboard = () => {
             padding: 12px 15px;
           }
           
-          .title {
-            font-size: 18px;
-          }
-          
           .chatArea {
-            padding: 15px;
+            padding: 10px 15px;
           }
           
           .inputContainer {
@@ -830,6 +954,126 @@ const Dashboard = () => {
             width: 32px;
             height: 32px;
           }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+// Analysis Panel Component
+const AnalysisPanel = ({ analysis }) => {
+  const { topDisease, recommendations, severity, confidence, detectedSymptoms } = analysis;
+
+  const getSeverityColor = (severity) => {
+    switch (severity) {
+      case 'low': return '#22c55e';
+      case 'medium': return '#eab308';
+      case 'high': return '#f97316';
+      case 'critical': return '#ef4444';
+      default: return '#6b7280';
+    }
+  };
+
+  return (
+    <div className="analysisDetails">
+      <div className="severityIndicator" style={{ borderColor: getSeverityColor(severity) }}>
+        <h4>Severity: <span style={{ color: getSeverityColor(severity) }}>{severity.toUpperCase()}</span></h4>
+        <p>Confidence: {Math.round(confidence)}%</p>
+      </div>
+
+      <div className="symptomsDetected">
+        <h5>Detected Symptoms:</h5>
+        <div className="symptomTags">
+          {detectedSymptoms.map((symptom, index) => (
+            <span key={index} className="symptomTag">{symptom}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="diseaseInfo">
+        <h5>Possible Condition:</h5>
+        <p className="diseaseName">{topDisease.name}</p>
+        <p className="diseaseDesc">{topDisease.description}</p>
+      </div>
+
+      <div className="actionRequired">
+        <h5>Recommended Action:</h5>
+        <p className="actionText" style={{ color: getSeverityColor(severity) }}>
+          {recommendations.action}
+        </p>
+      </div>
+
+      <style jsx>{`
+        .analysisDetails {
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .severityIndicator {
+          border-left: 4px solid;
+          padding-left: 12px;
+          margin-bottom: 16px;
+        }
+
+        .severityIndicator h4 {
+          margin: 0 0 4px 0;
+          font-size: 13px;
+          font-weight: 600;
+        }
+
+        .severityIndicator p {
+          margin: 0;
+          color: #666;
+          font-size: 11px;
+        }
+
+        .symptomsDetected,
+        .diseaseInfo,
+        .actionRequired {
+          margin-bottom: 16px;
+        }
+
+        .symptomsDetected h5,
+        .diseaseInfo h5,
+        .actionRequired h5 {
+          margin: 0 0 8px 0;
+          font-size: 12px;
+          font-weight: 600;
+          color: #333;
+        }
+
+        .symptomTags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+
+        .symptomTag {
+          background: #e0f2fe;
+          color: #0277bd;
+          padding: 2px 6px;
+          border-radius: 10px;
+          font-size: 10px;
+          font-weight: 500;
+        }
+
+        .diseaseName {
+          margin: 0 0 4px 0;
+          font-weight: 600;
+          color: #333;
+          text-transform: capitalize;
+        }
+
+        .diseaseDesc {
+          margin: 0;
+          color: #666;
+          font-size: 11px;
+        }
+
+        .actionText {
+          margin: 0;
+          font-weight: 600;
+          font-size: 12px;
         }
       `}</style>
     </div>
